@@ -1,11 +1,20 @@
 
+import os
 from mcp.server.fastmcp import FastMCP
 
-app = FastMCP("ClipMate AI")
+PORT = int(os.environ.get("PORT", 8000))
+
+app = FastMCP(
+    "ClipMate AI",
+    host="0.0.0.0",
+    port=PORT,
+    stateless_http=True,
+    json_response=True
+)
 
 @app.tool()
-def get_project_status():
-    """Check the current ClipMate AI project status."""
+def get_project_status() -> dict:
+    """Check ClipMate AI project status."""
     return {
         "name": "ClipMate AI",
         "status": "Under development",
@@ -19,4 +28,5 @@ def get_project_status():
     }
 
 if __name__ == "__main__":
-    app.run()
+    app.run(transport="streamable-http")
+
