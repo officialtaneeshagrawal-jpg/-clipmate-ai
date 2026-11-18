@@ -1,0 +1,1 @@
+"""Specialist processing modules for ClipMate AI."""
