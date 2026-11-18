@@ -1,10 +1,13 @@
+
 """
 ClipMate AI - Central Pipeline
 
-Coordinates all specialist processing modules.
+Coordinates specialist processing modules.
 """
 
 from dataclasses import dataclass
+
+from clipmate.modules.scene_trimmer import SceneTrimmer
 
 
 @dataclass
@@ -21,6 +24,7 @@ class ClipMatePipeline:
 
     def __init__(self, settings=None):
         self.settings = settings or PipelineSettings()
+        self.scene_trimmer = SceneTrimmer()
 
     def get_workflow(self):
         workflow = []
@@ -44,5 +48,24 @@ class ClipMatePipeline:
             "project": "ClipMate AI",
             "workflow": workflow,
             "creator": "Taneesh Agrawal",
-            "status": "Workflow configured; processing engines pending"
+            "status": "Scene trimming engine connected; other engines pending"
         }
+
+    def trim_video(
+        self,
+        video_path: str,
+        start_seconds: float,
+        end_seconds: float,
+        output_path: str = None
+    ) -> dict:
+        """Trim a selected video section using FFmpeg."""
+
+        if not self.settings.trim_scenes:
+            raise RuntimeError("Scene trimming is disabled.")
+
+        return self.scene_trimmer.trim(
+            video_path=video_path,
+            start_seconds=start_seconds,
+            end_seconds=end_seconds,
+            output_path=output_path
+        )
