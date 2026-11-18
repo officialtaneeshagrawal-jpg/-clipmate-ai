@@ -1,0 +1,5 @@
+fastapi
+uvicorn
+mcp>=1.28,<2
+opencv-python
+faster-whisper
