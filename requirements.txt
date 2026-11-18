@@ -6,3 +6,4 @@ opencv-python
 faster-whisper
 yt-dlp[default]
 imageio-ffmpeg
+
