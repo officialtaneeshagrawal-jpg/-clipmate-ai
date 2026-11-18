@@ -74,21 +74,39 @@ def get_pipeline_workflow(
     return ClipMatePipeline(settings).get_workflow()
 
 
+
 @app.tool()
 def inspect_video_url(url: str) -> dict:
-    """Inspect an authorized video URL."""
+    """Inspect an authorized video URL and collect diagnostic information."""
 
     if urlparse(url).scheme != "https":
         return {"error": "Only HTTPS URLs are accepted."}
 
-    try:
-        options = {
-            "quiet": True,
-            "no_warnings": True,
-            "skip_download": True,
-            "noplaylist": True
-        }
+    class DiagnosticLogger:
+        def __init__(self):
+            self.messages = []
 
+        def debug(self, message):
+            self.messages.append(str(message))
+
+        def warning(self, message):
+            self.messages.append("WARNING: " + str(message))
+
+        def error(self, message):
+            self.messages.append("ERROR: " + str(message))
+
+    logger = DiagnosticLogger()
+
+    options = {
+        "quiet": True,
+        "no_warnings": False,
+        "verbose": True,
+        "skip_download": True,
+        "noplaylist": True,
+        "logger": logger
+    }
+
+    try:
         with yt_dlp.YoutubeDL(options) as ydl:
             info = ydl.extract_info(url, download=False)
 
@@ -100,7 +118,12 @@ def inspect_video_url(url: str) -> dict:
         }
 
     except Exception as error:
-        return {"error": str(error)[:500]}
+        return {
+            "status": "Inspection failed",
+            "error": str(error)[:1000],
+            "diagnostic_logs": logger.messages[-30:]
+        }
+
 
 
 @app.tool()
