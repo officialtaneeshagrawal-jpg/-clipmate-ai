@@ -255,5 +255,43 @@ def trim_video_section(
         return {"error": str(error)[:1000]}
 
 
+@app.tool()
+def caption_uploaded_video(video_path: str) -> dict:
+    """Generate and burn captions into a video already uploaded to cloud."""
+
+    try:
+        source = Path(video_path).resolve()
+        allowed_directory = DOWNLOAD_DIR.resolve()
+
+        if not source.is_relative_to(allowed_directory):
+            return {
+                "error": "Video must be inside the server downloads folder."
+            }
+
+        if not source.is_file():
+            return {"error": "Uploaded video not found."}
+
+        job_id = uuid.uuid4().hex[:10]
+        output = OUTPUT_DIR / f"{job_id}_captioned.mp4"
+
+        result = add_captions(
+            str(source),
+            str(output)
+        )
+
+        return {
+            "creator": "Taneesh Agrawal",
+            "status": "Captioning completed",
+            "result": result,
+            "output_file": str(output)
+        }
+
+    except Exception as error:
+        return {
+            "status": "Captioning failed",
+            "error": str(error)[:1000]
+        }
+
+
 if __name__ == "__main__":
     app.run(transport="streamable-http")
