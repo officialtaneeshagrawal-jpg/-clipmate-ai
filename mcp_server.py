@@ -11,7 +11,7 @@ import imageio_ffmpeg
 
 from clipmate.pipeline import ClipMatePipeline, PipelineSettings
 
-from clipmate.modules.captioner import add_captions
+from clipmate.modules.captioner import add_captions, transcribe_video
 
 from clipmate.modules.video_intelligence import VideoIntelligence
 
