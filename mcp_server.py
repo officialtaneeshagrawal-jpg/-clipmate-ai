@@ -260,6 +260,38 @@ def trim_video_section(
 
 
 @app.tool()
+def transcribe_uploaded_video(video_path: str) -> dict:
+    """
+    Extract speech and return detected language
+    with timestamped transcript segments to Claude.
+    """
+
+    try:
+        source = Path(video_path).resolve()
+        allowed_directory = DOWNLOAD_DIR.resolve()
+
+        if not source.is_relative_to(allowed_directory):
+            return {
+                "status": "error",
+                "message": "Video must be inside the server downloads folder."
+            }
+
+        if not source.is_file():
+            return {
+                "status": "error",
+                "message": "Uploaded video not found."
+            }
+
+        return transcribe_video(str(source))
+
+    except Exception as error:
+        return {
+            "status": "error",
+            "message": str(error)[:1000]
+        }
+
+
+@app.tool()
 def caption_uploaded_video(video_path: str) -> dict:
     """Generate and burn captions into a video already uploaded to cloud."""
 
