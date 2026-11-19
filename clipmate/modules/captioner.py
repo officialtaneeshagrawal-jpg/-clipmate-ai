@@ -1,3 +1,4 @@
+import math
 import shutil
 import subprocess
 import uuid
@@ -232,11 +233,19 @@ def render_claude_captions(video_path, output_path, caption_segments):
         with open(subtitles, "w", encoding="utf-8") as file:
             for index, segment in enumerate(caption_segments, start=1):
                 start = float(segment["start"])
-                end = float(segment["end"])
-                text = str(segment["text"]).strip()
+end = float(segment["end"])
+text = str(segment["text"]).strip()
 
-                if start < 0 or end <= start or not text:
-                    raise ValueError("Invalid caption segment.")
+if (
+    not math.isfinite(start)
+    or not math.isfinite(end)
+    or start < 0
+    or end <= start
+    or not text
+):
+    raise ValueError("Invalid caption segment.")
+
+text = " ".join(text.split())
 
                 safe_text = text.replace("-->", "→")
 
