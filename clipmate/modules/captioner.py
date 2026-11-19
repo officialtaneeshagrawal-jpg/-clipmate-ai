@@ -1,3 +1,4 @@
+
 import math
 import shutil
 import subprocess
@@ -8,9 +9,44 @@ import imageio_ffmpeg
 from faster_whisper import WhisperModel
 
 
+def get_ffmpeg():
+    return shutil.which("ffmpeg") or imageio_ffmpeg.get_ffmpeg_exe()
+
+
+def format_time(seconds):
+    milliseconds = round(seconds * 1000)
+
+    hours = milliseconds // 3600000
+    minutes = (milliseconds % 3600000) // 60000
+    seconds_part = (milliseconds % 60000) // 1000
+    millis = milliseconds % 1000
+
+    return (
+        f"{hours:02}:{minutes:02}:"
+        f"{seconds_part:02},{millis:03}"
+    )
+
+
+def extract_audio(source, audio, ffmpeg):
+    subprocess.run(
+        [
+            ffmpeg, "-y",
+            "-i", str(source),
+            "-vn",
+            "-ac", "1",
+            "-ar", "16000",
+            "-c:a", "pcm_s16le",
+            str(audio)
+        ],
+        check=True,
+        capture_output=True,
+        timeout=600
+    )
+
+
 def transcribe_video(video_path):
     """
-    Extract speech from a video and return detected language
+    Extract speech and return detected language
     with timestamped transcript segments for Claude.
     """
 
@@ -22,26 +58,11 @@ def transcribe_video(video_path):
     job_id = uuid.uuid4().hex[:10]
     audio = source.parent / f"{job_id}_audio.wav"
 
-    ffmpeg = shutil.which("ffmpeg") or imageio_ffmpeg.get_ffmpeg_exe()
+    ffmpeg = get_ffmpeg()
 
     try:
-        # Extract audio from video.
-        subprocess.run(
-            [
-                ffmpeg, "-y",
-                "-i", str(source),
-                "-vn",
-                "-ac", "1",
-                "-ar", "16000",
-                "-c:a", "pcm_s16le",
-                str(audio)
-            ],
-            check=True,
-            capture_output=True,
-            timeout=600
-        )
+        extract_audio(source, audio, ffmpeg)
 
-        # Detect language and transcribe speech.
         model = WhisperModel(
             "base",
             device="cpu",
@@ -79,8 +100,11 @@ def transcribe_video(video_path):
         audio.unlink(missing_ok=True)
 
 
-
 def add_captions(video_path, output_path):
+    """
+    Original automatic Whisper captioning function.
+    """
+
     source = Path(video_path).resolve()
     output = Path(output_path).resolve()
 
@@ -96,26 +120,11 @@ def add_captions(video_path, output_path):
     audio = output.parent / f"{job_id}_audio.wav"
     subtitles = output.parent / f"{job_id}.srt"
 
-    ffmpeg = imageio_ffmpeg.get_ffmpeg_exe()
+    ffmpeg = get_ffmpeg()
 
     try:
-        # Extract audio from the original video.
-        subprocess.run(
-            [
-                ffmpeg, "-y",
-                "-i", str(source),
-                "-vn",
-                "-ac", "1",
-                "-ar", "16000",
-                "-c:a", "pcm_s16le",
-                str(audio)
-            ],
-            check=True,
-            capture_output=True,
-            timeout=600
-        )
+        extract_audio(source, audio, ffmpeg)
 
-        # Transcribe the extracted audio.
         model = WhisperModel(
             "base",
             device="cpu",
@@ -128,53 +137,21 @@ def add_captions(video_path, output_path):
             vad_filter=True
         )
 
+        count = 0
+
         with open(subtitles, "w", encoding="utf-8") as file:
-            count = 0
-
             for count, segment in enumerate(segments, start=1):
-                start = format_time(segment.start)
-                end = format_time(segment.end)
-
                 file.write(f"{count}\n")
-                file.write(f"{start} --> {end}\n")
+                file.write(
+                    f"{format_time(segment.start)} --> "
+                    f"{format_time(segment.end)}\n"
+                )
                 file.write(f"{segment.text.strip()}\n\n")
 
         if count == 0:
             raise RuntimeError("No speech was detected.")
 
-        # Burn subtitles into the original video.
-        subtitle_path = str(subtitles).replace("\\", "/")
-        subtitle_path = subtitle_path.replace(":", r"\:")
-        subtitle_path = subtitle_path.replace("'", r"\'")
-
-        command = [
-            ffmpeg, "-y",
-            "-i", str(source),
-            "-map", "0:v:0",
-            "-map", "0:a?",
-            "-vf",
-            (
-                f"subtitles=filename='{subtitle_path}':"
-                "force_style='FontSize=22,"
-                "PrimaryColour=&H00FFFFFF,"
-                "OutlineColour=&H00000000,"
-                "BorderStyle=1,Outline=2,"
-                "Alignment=2,MarginV=60'"
-            ),
-            "-c:v", "libx264",
-            "-preset", "ultrafast",
-            "-crf", "23",
-            "-c:a", "aac",
-            "-movflags", "+faststart",
-            str(output)
-        ]
-
-        subprocess.run(
-            command,
-            check=True,
-            capture_output=True,
-            timeout=3600
-        )
+        render_subtitles(source, output, subtitles, ffmpeg)
 
         if not output.is_file() or output.stat().st_size == 0:
             raise RuntimeError("Captioned video was not created.")
@@ -192,19 +169,6 @@ def add_captions(video_path, output_path):
         subtitles.unlink(missing_ok=True)
 
 
-def format_time(seconds):
-    milliseconds = round(seconds * 1000)
-
-    hours = milliseconds // 3600000
-    minutes = (milliseconds % 3600000) // 60000
-    seconds_part = (milliseconds % 60000) // 1000
-    millis = milliseconds % 1000
-
-    return (
-        f"{hours:02}:{minutes:02}:"
-        f"{seconds_part:02},{millis:03}"
-    )
-
 def render_claude_captions(video_path, output_path, caption_segments):
     """
     Render timestamped captions supplied by Claude onto a video.
@@ -219,7 +183,7 @@ def render_claude_captions(video_path, output_path, caption_segments):
     if source == output:
         raise ValueError("Input and output must be different.")
 
-    if not caption_segments:
+    if not isinstance(caption_segments, list) or not caption_segments:
         raise ValueError("No caption segments provided.")
 
     output.parent.mkdir(parents=True, exist_ok=True)
@@ -227,66 +191,35 @@ def render_claude_captions(video_path, output_path, caption_segments):
     job_id = uuid.uuid4().hex[:10]
     subtitles = output.parent / f"{job_id}.srt"
 
-    ffmpeg = imageio_ffmpeg.get_ffmpeg_exe()
+    ffmpeg = get_ffmpeg()
 
     try:
         with open(subtitles, "w", encoding="utf-8") as file:
             for index, segment in enumerate(caption_segments, start=1):
+
                 start = float(segment["start"])
-end = float(segment["end"])
-text = str(segment["text"]).strip()
+                end = float(segment["end"])
+                text = str(segment["text"]).strip()
 
-if (
-    not math.isfinite(start)
-    or not math.isfinite(end)
-    or start < 0
-    or end <= start
-    or not text
-):
-    raise ValueError("Invalid caption segment.")
+                if (
+                    not math.isfinite(start)
+                    or not math.isfinite(end)
+                    or start < 0
+                    or end <= start
+                    or not text
+                ):
+                    raise ValueError("Invalid caption segment.")
 
-text = " ".join(text.split())
-
-                safe_text = text.replace("-->", "→")
+                text = " ".join(text.split())
+                text = text.replace("-->", "→")
 
                 file.write(f"{index}\n")
                 file.write(
                     f"{format_time(start)} --> {format_time(end)}\n"
                 )
-                file.write(f"{safe_text}\n\n")
+                file.write(f"{text}\n\n")
 
-        subtitle_path = str(subtitles).replace("\\", "/")
-        subtitle_path = subtitle_path.replace(":", r"\:")
-        subtitle_path = subtitle_path.replace("'", r"\'")
-
-        command = [
-            ffmpeg, "-y",
-            "-i", str(source),
-            "-map", "0:v:0",
-            "-map", "0:a?",
-            "-vf",
-            (
-                f"subtitles=filename='{subtitle_path}':"
-                "force_style='FontSize=22,"
-                "PrimaryColour=&H00FFFFFF,"
-                "OutlineColour=&H00000000,"
-                "BorderStyle=1,Outline=2,"
-                "Alignment=2,MarginV=60'"
-            ),
-            "-c:v", "libx264",
-            "-preset", "ultrafast",
-            "-crf", "23",
-            "-c:a", "aac",
-            "-movflags", "+faststart",
-            str(output)
-        ]
-
-        subprocess.run(
-            command,
-            check=True,
-            capture_output=True,
-            timeout=3600
-        )
+        render_subtitles(source, output, subtitles, ffmpeg)
 
         if not output.is_file() or output.stat().st_size == 0:
             raise RuntimeError("Captioned video was not created.")
@@ -299,4 +232,43 @@ text = " ".join(text.split())
 
     finally:
         subtitles.unlink(missing_ok=True)
+
+
+def render_subtitles(source, output, subtitles, ffmpeg):
+    """
+    Burn an SRT subtitle file into a video using FFmpeg.
+    """
+
+    subtitle_path = str(subtitles).replace("\\", "/")
+    subtitle_path = subtitle_path.replace(":", r"\:")
+    subtitle_path = subtitle_path.replace("'", r"\'")
+
+    command = [
+        ffmpeg, "-y",
+        "-i", str(source),
+        "-map", "0:v:0",
+        "-map", "0:a?",
+        "-vf",
+        (
+            f"subtitles=filename='{subtitle_path}':"
+            "force_style='FontSize=22,"
+            "PrimaryColour=&H00FFFFFF,"
+            "OutlineColour=&H00000000,"
+            "BorderStyle=1,Outline=2,"
+            "Alignment=2,MarginV=60'"
+        ),
+        "-c:v", "libx264",
+        "-preset", "ultrafast",
+        "-crf", "23",
+        "-c:a", "aac",
+        "-movflags", "+faststart",
+        str(output)
+    ]
+
+    subprocess.run(
+        command,
+        check=True,
+        capture_output=True,
+        timeout=3600
+    )
 
