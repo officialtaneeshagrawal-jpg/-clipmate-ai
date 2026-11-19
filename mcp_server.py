@@ -321,5 +321,37 @@ def analyze_video_metadata(video_path: str) -> dict:
             "message": str(error)
         }
 
+
+@mcp.tool()
+def detect_video_scenes(
+    video_path: str,
+    threshold: float = 30.0,
+    minimum_gap_seconds: float = 1.0
+) -> dict:
+    """
+    Detect scene changes and return their timestamps.
+    """
+    try:
+        source = Path(video_path).resolve()
+
+        if not source.is_relative_to(DOWNLOAD_DIR.resolve()):
+            return {
+                "status": "error",
+                "message": "Video must be inside the uploads directory."
+            }
+
+        return video_intelligence.detect_scenes(
+            str(source),
+            threshold=threshold,
+            minimum_gap_seconds=minimum_gap_seconds
+        )
+
+    except Exception as error:
+        return {
+            "status": "error",
+            "message": str(error)
+        }
+
+
 if __name__ == "__main__":
     app.run(transport="streamable-http")
