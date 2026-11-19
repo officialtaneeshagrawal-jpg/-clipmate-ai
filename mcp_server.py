@@ -25,6 +25,8 @@ app = FastMCP(
     json_response=True
 )
 
+video_intelligence = VideoIntelligence()
+
 BASE_DIR = Path("/tmp/clipmate")
 DOWNLOAD_DIR = BASE_DIR / "downloads"
 OUTPUT_DIR = BASE_DIR / "output"
