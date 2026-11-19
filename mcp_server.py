@@ -11,7 +11,11 @@ import imageio_ffmpeg
 
 from clipmate.pipeline import ClipMatePipeline, PipelineSettings
 
-from clipmate.modules.captioner import add_captions, transcribe_video
+from clipmate.modules.captioner import (
+    add_captions,
+    transcribe_video,
+    render_claude_captions
+)
 
 from clipmate.modules.video_intelligence import VideoIntelligence
 
@@ -290,6 +294,49 @@ def transcribe_uploaded_video(video_path: str) -> dict:
             "message": str(error)[:1000]
         }
 
+
+@app.tool()
+def render_captioned_video(
+    video_path: str,
+    caption_segments: list
+) -> dict:
+    """Render Claude-prepared captions onto an uploaded video."""
+
+    try:
+        source = Path(video_path).resolve()
+
+        if not source.is_relative_to(DOWNLOAD_DIR.resolve()):
+            return {
+                "status": "error",
+                "message": "Video must be inside the server downloads folder."
+            }
+
+        if not source.is_file():
+            return {
+                "status": "error",
+                "message": "Uploaded video not found."
+            }
+
+        job_id = uuid.uuid4().hex[:10]
+        output = OUTPUT_DIR / f"{job_id}_claude_captioned.mp4"
+
+        result = render_claude_captions(
+            str(source),
+            str(output),
+            caption_segments
+        )
+
+        return {
+            "status": "success",
+            "result": result,
+            "output_file": str(output)
+        }
+
+    except Exception as error:
+        return {
+            "status": "error",
+            "message": str(error)[:1000]
+        }
 
 @app.tool()
 def caption_uploaded_video(video_path: str) -> dict:
