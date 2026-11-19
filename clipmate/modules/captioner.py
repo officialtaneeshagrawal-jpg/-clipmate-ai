@@ -7,6 +7,78 @@ import imageio_ffmpeg
 from faster_whisper import WhisperModel
 
 
+def transcribe_video(video_path):
+    """
+    Extract speech from a video and return detected language
+    with timestamped transcript segments for Claude.
+    """
+
+    source = Path(video_path).resolve()
+
+    if not source.is_file():
+        raise FileNotFoundError("Input video not found.")
+
+    job_id = uuid.uuid4().hex[:10]
+    audio = source.parent / f"{job_id}_audio.wav"
+
+    ffmpeg = imageio_ffmpeg.get_ffmpeg_exe()
+
+    try:
+        # Extract audio from video.
+        subprocess.run(
+            [
+                ffmpeg, "-y",
+                "-i", str(source),
+                "-vn",
+                "-ac", "1",
+                "-ar", "16000",
+                "-c:a", "pcm_s16le",
+                str(audio)
+            ],
+            check=True,
+            capture_output=True,
+            timeout=600
+        )
+
+        # Detect language and transcribe speech.
+        model = WhisperModel(
+            "base",
+            device="cpu",
+            compute_type="int8"
+        )
+
+        segments, info = model.transcribe(
+            str(audio),
+            beam_size=5,
+            vad_filter=True
+        )
+
+        transcript = []
+
+        for segment in segments:
+            transcript.append({
+                "start": round(segment.start, 3),
+                "end": round(segment.end, 3),
+                "text": segment.text.strip()
+            })
+
+        if not transcript:
+            raise RuntimeError("No speech was detected.")
+
+        return {
+            "status": "success",
+            "detected_language": info.language,
+            "language_probability": round(
+                info.language_probability, 4
+            ),
+            "segments": transcript
+        }
+
+    finally:
+        audio.unlink(missing_ok=True)
+
+
+
 def add_captions(video_path, output_path):
     source = Path(video_path).resolve()
     output = Path(output_path).resolve()
