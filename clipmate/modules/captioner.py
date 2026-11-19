@@ -203,3 +203,91 @@ def format_time(seconds):
         f"{hours:02}:{minutes:02}:"
         f"{seconds_part:02},{millis:03}"
     )
+
+def render_claude_captions(video_path, output_path, caption_segments):
+    """
+    Render timestamped captions supplied by Claude onto a video.
+    """
+
+    source = Path(video_path).resolve()
+    output = Path(output_path).resolve()
+
+    if not source.is_file():
+        raise FileNotFoundError("Input video not found.")
+
+    if source == output:
+        raise ValueError("Input and output must be different.")
+
+    if not caption_segments:
+        raise ValueError("No caption segments provided.")
+
+    output.parent.mkdir(parents=True, exist_ok=True)
+
+    job_id = uuid.uuid4().hex[:10]
+    subtitles = output.parent / f"{job_id}.srt"
+
+    ffmpeg = imageio_ffmpeg.get_ffmpeg_exe()
+
+    try:
+        with open(subtitles, "w", encoding="utf-8") as file:
+            for index, segment in enumerate(caption_segments, start=1):
+                start = float(segment["start"])
+                end = float(segment["end"])
+                text = str(segment["text"]).strip()
+
+                if start < 0 or end <= start or not text:
+                    raise ValueError("Invalid caption segment.")
+
+                safe_text = text.replace("-->", "→")
+
+                file.write(f"{index}\n")
+                file.write(
+                    f"{format_time(start)} --> {format_time(end)}\n"
+                )
+                file.write(f"{safe_text}\n\n")
+
+        subtitle_path = str(subtitles).replace("\\", "/")
+        subtitle_path = subtitle_path.replace(":", r"\:")
+        subtitle_path = subtitle_path.replace("'", r"\'")
+
+        command = [
+            ffmpeg, "-y",
+            "-i", str(source),
+            "-map", "0:v:0",
+            "-map", "0:a?",
+            "-vf",
+            (
+                f"subtitles=filename='{subtitle_path}':"
+                "force_style='FontSize=22,"
+                "PrimaryColour=&H00FFFFFF,"
+                "OutlineColour=&H00000000,"
+                "BorderStyle=1,Outline=2,"
+                "Alignment=2,MarginV=60'"
+            ),
+            "-c:v", "libx264",
+            "-preset", "ultrafast",
+            "-crf", "23",
+            "-c:a", "aac",
+            "-movflags", "+faststart",
+            str(output)
+        ]
+
+        subprocess.run(
+            command,
+            check=True,
+            capture_output=True,
+            timeout=3600
+        )
+
+        if not output.is_file() or output.stat().st_size == 0:
+            raise RuntimeError("Captioned video was not created.")
+
+        return {
+            "status": "success",
+            "output": str(output),
+            "captions": len(caption_segments)
+        }
+
+    finally:
+        subtitles.unlink(missing_ok=True)
+
