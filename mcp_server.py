@@ -13,6 +13,8 @@ from clipmate.pipeline import ClipMatePipeline, PipelineSettings
 
 from clipmate.modules.captioner import add_captions
 
+from clipmate.modules.video_intelligence import VideoIntelligence
+
 PORT = int(os.environ.get("PORT", 8000))
 
 app = FastMCP(
