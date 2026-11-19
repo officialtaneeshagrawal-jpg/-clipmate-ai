@@ -21,7 +21,7 @@ def transcribe_video(video_path):
     job_id = uuid.uuid4().hex[:10]
     audio = source.parent / f"{job_id}_audio.wav"
 
-    ffmpeg = imageio_ffmpeg.get_ffmpeg_exe()
+    ffmpeg = shutil.which("ffmpeg") or imageio_ffmpeg.get_ffmpeg_exe()
 
     try:
         # Extract audio from video.
