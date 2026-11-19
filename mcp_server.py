@@ -352,6 +352,34 @@ def detect_video_scenes(
             "message": str(error)
         }
 
+@mcp.tool()
+def extract_video_keyframes(
+    video_path: str,
+    interval_seconds: float = 10.0
+) -> dict:
+    """
+    Extract representative frames from an uploaded video at regular intervals.
+    """
+    try:
+        source = Path(video_path).resolve()
+
+        if not source.is_relative_to(DOWNLOAD_DIR.resolve()):
+            return {
+                "status": "error",
+                "message": "Video must be inside the uploads directory."
+            }
+
+        return video_intelligence.extract_keyframes(
+            str(source),
+            interval_seconds=interval_seconds
+        )
+
+    except Exception as error:
+        return {
+            "status": "error",
+            "message": str(error)
+        }
+
 
 if __name__ == "__main__":
     app.run(transport="streamable-http")
