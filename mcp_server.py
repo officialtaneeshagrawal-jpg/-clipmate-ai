@@ -297,7 +297,7 @@ def caption_uploaded_video(video_path: str) -> dict:
         }
 
 
-@mcp.tool()
+@app.tool()
 def analyze_video_metadata(video_path: str) -> dict:
     """
     Get video duration, resolution, FPS and frame count.
@@ -322,7 +322,7 @@ def analyze_video_metadata(video_path: str) -> dict:
         }
 
 
-@mcp.tool()
+@app.tool()
 def detect_video_scenes(
     video_path: str,
     threshold: float = 30.0,
@@ -352,7 +352,7 @@ def detect_video_scenes(
             "message": str(error)
         }
 
-@mcp.tool()
+@app.tool()
 def extract_video_keyframes(
     video_path: str,
     interval_seconds: float = 10.0
