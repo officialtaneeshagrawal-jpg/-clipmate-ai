@@ -297,5 +297,29 @@ def caption_uploaded_video(video_path: str) -> dict:
         }
 
 
+@mcp.tool()
+def analyze_video_metadata(video_path: str) -> dict:
+    """
+    Get video duration, resolution, FPS and frame count.
+    """
+    try:
+        source = Path(video_path).resolve()
+
+        if not source.is_relative_to(DOWNLOAD_DIR.resolve()):
+            return {
+                "status": "error",
+                "message": "Video must be inside the uploads directory."
+            }
+
+        return video_intelligence.get_video_metadata(
+            str(source)
+        )
+
+    except Exception as error:
+        return {
+            "status": "error",
+            "message": str(error)
+        }
+
 if __name__ == "__main__":
     app.run(transport="streamable-http")
