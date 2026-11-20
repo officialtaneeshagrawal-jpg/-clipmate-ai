@@ -4,8 +4,6 @@ ClipMate AI - MCP Server
 Existing video tools + direct HTTP upload + full-video captioning.
 """
 
-from clipmate import clipmate_caption_support as caption_support
-
 import os
 import shutil
 import uuid
@@ -31,6 +29,7 @@ PORT = int(os.environ.get("PORT", "8000"))
 BASE_DIR = Path(
     os.environ.get("CLIPMATE_BASE_DIR", "/tmp/clipmate")
 )
+from clipmate import clipmate_caption_support as caption_support
 
 DOWNLOAD_DIR = BASE_DIR / "downloads"
 OUTPUT_DIR = BASE_DIR / "output"
