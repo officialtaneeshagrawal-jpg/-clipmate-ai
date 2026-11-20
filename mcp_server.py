@@ -5,6 +5,7 @@ Existing video tools + direct HTTP upload + full-video captioning.
 """
 
 from clipmate import clipmate_caption_support as caption_support
+caption_support.register(app)
 
 import os
 import shutil
