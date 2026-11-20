@@ -33,13 +33,13 @@ app = FastMCP(
     json_response=True
 )
 
+
 @app.tool()
 def upload_video(
     filename: str,
     video_base64: str,
     token: str
 ) -> dict:
-
     """Upload a video into ClipMate's downloads directory."""
 
     if not UPLOAD_TOKEN:
@@ -55,22 +55,31 @@ def upload_video(
         }
 
     if not filename.lower().endswith((".mp4", ".mov", ".mkv", ".webm")):
-        return {"status": "error", "message": "Unsupported video format."}
+        return {
+            "status": "error",
+            "message": "Unsupported video format."
+        }
 
-if len(video_base64) > 140 * 1024 * 1024:
-    return {
-        "status": "error",
-        "message": "Encoded video exceeds the upload limit."
-    }
+    if len(video_base64) > 140 * 1024 * 1024:
+        return {
+            "status": "error",
+            "message": "Encoded video exceeds the upload limit."
+        }
 
     try:
         video_data = base64.b64decode(video_base64, validate=True)
 
         if not video_data:
-            return {"status": "error", "message": "Empty video file."}
+            return {
+                "status": "error",
+                "message": "Empty video file."
+            }
 
         if len(video_data) > 100 * 1024 * 1024:
-            return {"status": "error", "message": "Video exceeds 100 MB limit."}
+            return {
+                "status": "error",
+                "message": "Video exceeds 100 MB limit."
+            }
 
         job_id = uuid.uuid4().hex[:12]
         safe_filename = f"{job_id}_{Path(filename).name}"
@@ -91,17 +100,6 @@ if len(video_base64) > 140 * 1024 * 1024:
             "message": str(exc)
         }
 
-
-video_intelligence = VideoIntelligence()
-
-BASE_DIR = Path("/tmp/clipmate")
-DOWNLOAD_DIR = BASE_DIR / "downloads"
-OUTPUT_DIR = BASE_DIR / "output"
-
-DOWNLOAD_DIR.mkdir(parents=True, exist_ok=True)
-OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-
-FFMPEG = imageio_ffmpeg.get_ffmpeg_exe()
 
 
 @app.tool()
