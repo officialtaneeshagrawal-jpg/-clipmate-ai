@@ -4,6 +4,8 @@ ClipMate AI - MCP Server
 Existing video tools + direct HTTP upload + full-video captioning.
 """
 
+from clipmate import clipmate_caption_support as caption_support
+
 import os
 import shutil
 import uuid
