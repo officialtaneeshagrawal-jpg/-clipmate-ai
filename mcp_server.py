@@ -23,6 +23,8 @@ from clipmate.modules.video_intelligence import VideoIntelligence
 
 PORT = int(os.environ.get("PORT", 8000))
 
+UPLOAD_TOKEN = os.environ.get("CLIPMATE_UPLOAD_TOKEN")
+
 app = FastMCP(
     "ClipMate AI",
     host="0.0.0.0",
@@ -32,8 +34,25 @@ app = FastMCP(
 )
 
 @app.tool()
-def upload_video(filename: str, video_base64: str) -> dict:
+def upload_video(
+    filename: str,
+    video_base64: str,
+    token: str
+) -> dict:
+
     """Upload a video into ClipMate's downloads directory."""
+
+    if not UPLOAD_TOKEN:
+        return {
+            "status": "error",
+            "message": "Upload authentication is not configured."
+        }
+
+    if not hmac.compare_digest(token, UPLOAD_TOKEN):
+        return {
+            "status": "error",
+            "message": "Invalid upload authentication."
+        }
 
     if not filename.lower().endswith((".mp4", ".mov", ".mkv", ".webm")):
         return {"status": "error", "message": "Unsupported video format."}
