@@ -5,7 +5,6 @@ Existing video tools + direct HTTP upload + full-video captioning.
 """
 
 from clipmate import clipmate_caption_support as caption_support
-caption_support.register(app)
 
 import os
 import shutil
@@ -57,6 +56,7 @@ app = FastMCP(
     stateless_http=True,
     json_response=True,
 )
+caption_support.register(app)
 
 # Register direct upload, transcription and caption rendering.
 import clipmate_caption_support as caption_support
