@@ -7,7 +7,7 @@ import subprocess
 from pathlib import Path
 from urllib.parse import urlparse
 
-from mcp.server.fastmcp import FastMCP
+from mcp.server.fastmcp import FastMCP, Context
 import yt_dlp
 import imageio_ffmpeg
 
@@ -38,7 +38,7 @@ app = FastMCP(
 def upload_video(
     filename: str,
     video_base64: str,
-    token: str
+    ctx: Context
 ) -> dict:
     """Upload a video into ClipMate's downloads directory."""
 
