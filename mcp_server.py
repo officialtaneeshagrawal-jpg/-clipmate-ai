@@ -1,5 +1,7 @@
 
 import os
+import base64
+import hmac
 import uuid
 import subprocess
 from pathlib import Path
@@ -28,10 +30,6 @@ app = FastMCP(
     stateless_http=True,
     json_response=True
 )
-
-
-import base64
-import uuid
 
 @app.tool()
 def upload_video(filename: str, video_base64: str) -> dict:
