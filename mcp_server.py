@@ -57,6 +57,12 @@ def upload_video(
     if not filename.lower().endswith((".mp4", ".mov", ".mkv", ".webm")):
         return {"status": "error", "message": "Unsupported video format."}
 
+if len(video_base64) > 140 * 1024 * 1024:
+    return {
+        "status": "error",
+        "message": "Encoded video exceeds the upload limit."
+    }
+
     try:
         video_data = base64.b64decode(video_base64, validate=True)
 
