@@ -1,9 +1,9 @@
-
 import os
 import base64
 import hmac
 import uuid
 import subprocess
+import shutil
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -21,9 +21,30 @@ from clipmate.modules.captioner import (
 
 from clipmate.modules.video_intelligence import VideoIntelligence
 
+
+# =====================================================
+# CONFIGURATION
+# =====================================================
+
 PORT = int(os.environ.get("PORT", 8000))
 
 UPLOAD_TOKEN = os.environ.get("CLIPMATE_UPLOAD_TOKEN")
+
+BASE_DIR = Path("/tmp/clipmate")
+DOWNLOAD_DIR = BASE_DIR / "downloads"
+OUTPUT_DIR = BASE_DIR / "output"
+
+DOWNLOAD_DIR.mkdir(parents=True, exist_ok=True)
+OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+
+FFMPEG = shutil.which("ffmpeg") or imageio_ffmpeg.get_ffmpeg_exe()
+
+video_intelligence = VideoIntelligence()
+
+
+# =====================================================
+# MCP SERVER
+# =====================================================
 
 app = FastMCP(
     "ClipMate AI",
@@ -34,10 +55,15 @@ app = FastMCP(
 )
 
 
+# =====================================================
+# UPLOAD VIDEO
+# =====================================================
+
 @app.tool()
 def upload_video(
     filename: str,
     video_base64: str,
+    token: str,
     ctx: Context
 ) -> dict:
     """Upload a video into ClipMate's downloads directory."""
@@ -54,20 +80,19 @@ def upload_video(
             "message": "Invalid upload authentication."
         }
 
-    if not filename.lower().endswith((".mp4", ".mov", ".mkv", ".webm")):
+    if not filename.lower().endswith(
+        (".mp4", ".mov", ".mkv", ".webm")
+    ):
         return {
             "status": "error",
             "message": "Unsupported video format."
         }
 
-    if len(video_base64) > 140 * 1024 * 1024:
-        return {
-            "status": "error",
-            "message": "Encoded video exceeds the upload limit."
-        }
-
     try:
-        video_data = base64.b64decode(video_base64, validate=True)
+        video_data = base64.b64decode(
+            video_base64,
+            validate=True
+        )
 
         if not video_data:
             return {
@@ -75,14 +100,12 @@ def upload_video(
                 "message": "Empty video file."
             }
 
-        if len(video_data) > 100 * 1024 * 1024:
-            return {
-                "status": "error",
-                "message": "Video exceeds 100 MB limit."
-            }
-
         job_id = uuid.uuid4().hex[:12]
-        safe_filename = f"{job_id}_{Path(filename).name}"
+
+        safe_filename = (
+            f"{job_id}_{Path(filename).name}"
+        )
+
         destination = DOWNLOAD_DIR / safe_filename
 
         destination.write_bytes(video_data)
@@ -101,6 +124,9 @@ def upload_video(
         }
 
 
+# =====================================================
+# PROJECT STATUS
+# =====================================================
 
 @app.tool()
 def get_project_status() -> dict:
@@ -116,10 +142,16 @@ def get_project_status() -> dict:
             "Basic clip generation",
             "MP4 export",
             "Modular pipeline",
-            "FFmpeg scene trimming"
+            "FFmpeg scene trimming",
+            "Video transcription",
+            "Caption rendering"
         ]
     }
 
+
+# =====================================================
+# PIPELINE WORKFLOW
+# =====================================================
 
 @app.tool()
 def get_pipeline_workflow(
@@ -130,7 +162,6 @@ def get_pipeline_workflow(
     smart_reframing: bool = True,
     enhance_audio: bool = True
 ) -> dict:
-    """Configure and inspect the processing workflow."""
 
     settings = PipelineSettings(
         detect_highlights=detect_highlights,
@@ -144,15 +175,18 @@ def get_pipeline_workflow(
     return ClipMatePipeline(settings).get_workflow()
 
 
+# =====================================================
+# INSPECT VIDEO URL
+# =====================================================
 
 @app.tool()
 def inspect_video_url(url: str) -> dict:
-    """Inspect an authorized video URL and collect diagnostic information."""
 
     if urlparse(url).scheme != "https":
         return {"error": "Only HTTPS URLs are accepted."}
 
     class DiagnosticLogger:
+
         def __init__(self):
             self.messages = []
 
@@ -195,10 +229,15 @@ def inspect_video_url(url: str) -> dict:
         }
 
 
+# =====================================================
+# BASIC CLIPS
+# =====================================================
 
 @app.tool()
-def create_basic_clips(url: str, clip_count: int = 3) -> dict:
-    """Create evenly spaced clips from an authorized video."""
+def create_basic_clips(
+    url: str,
+    clip_count: int = 3
+) -> dict:
 
     if urlparse(url).scheme != "https":
         return {"error": "Only HTTPS URLs are accepted."}
@@ -224,16 +263,21 @@ def create_basic_clips(url: str, clip_count: int = 3) -> dict:
         duration = float(info.get("duration") or 0)
 
         if duration <= 0:
-            return {"error": "Could not determine video duration."}
+            return {
+                "error": "Could not determine video duration."
+            }
 
         segment = duration / clip_count
         results = []
 
         for index in range(clip_count):
+
             start = index * segment
             length = min(segment, duration - start)
 
-            output = OUTPUT_DIR / f"{job_id}_clip_{index + 1}.mp4"
+            output = OUTPUT_DIR / (
+                f"{job_id}_clip_{index + 1}.mp4"
+            )
 
             command = [
                 FFMPEG, "-y",
@@ -265,7 +309,7 @@ def create_basic_clips(url: str, clip_count: int = 3) -> dict:
             "creator": "Taneesh Agrawal",
             "video_title": info.get("title"),
             "clips": results,
-            "note": "Basic evenly spaced clips, not AI-selected highlights."
+            "note": "Basic evenly spaced clips."
         }
 
     except Exception as error:
@@ -276,30 +320,30 @@ def create_basic_clips(url: str, clip_count: int = 3) -> dict:
             source.unlink()
 
 
+# =====================================================
+# TRIM VIDEO
+# =====================================================
+
 @app.tool()
 def trim_video_section(
     video_path: str,
     start_seconds: float,
     end_seconds: float
 ) -> dict:
-    """
-    Trim a video already present in the server's downloads folder.
-    The user must own or have permission to process the video.
-    """
 
     try:
         source = Path(video_path).resolve()
-        allowed_directory = DOWNLOAD_DIR.resolve()
 
-        if not source.is_relative_to(allowed_directory):
+        if not source.is_relative_to(DOWNLOAD_DIR.resolve()):
             return {
                 "error": "Video must be inside the server downloads folder."
             }
 
         if not source.is_file():
-            return {"error": "Video file not found on the server."}
+            return {"error": "Video file not found."}
 
         job_id = uuid.uuid4().hex[:10]
+
         output = OUTPUT_DIR / f"{job_id}_trimmed.mp4"
 
         pipeline = ClipMatePipeline()
@@ -314,31 +358,28 @@ def trim_video_section(
         return {
             "creator": "Taneesh Agrawal",
             "result": result,
-            "note": (
-                "The MP4 is saved on the server. "
-                "A downloadable link is not implemented yet."
-            )
+            "output_file": str(output)
         }
 
     except Exception as error:
         return {"error": str(error)[:1000]}
 
 
+# =====================================================
+# TRANSCRIBE VIDEO
+# =====================================================
+
 @app.tool()
 def transcribe_uploaded_video(video_path: str) -> dict:
-    """
-    Extract speech and return detected language
-    with timestamped transcript segments to Claude.
-    """
+    """Extract speech and return timestamped transcript."""
 
     try:
         source = Path(video_path).resolve()
-        allowed_directory = DOWNLOAD_DIR.resolve()
 
-        if not source.is_relative_to(allowed_directory):
+        if not source.is_relative_to(DOWNLOAD_DIR.resolve()):
             return {
                 "status": "error",
-                "message": "Video must be inside the server downloads folder."
+                "message": "Video must be inside downloads."
             }
 
         if not source.is_file():
@@ -356,6 +397,10 @@ def transcribe_uploaded_video(video_path: str) -> dict:
         }
 
 
+# =====================================================
+# RENDER CLAUDE CAPTIONS
+# =====================================================
+
 @app.tool()
 def render_captioned_video(
     video_path: str,
@@ -369,7 +414,7 @@ def render_captioned_video(
         if not source.is_relative_to(DOWNLOAD_DIR.resolve()):
             return {
                 "status": "error",
-                "message": "Video must be inside the server downloads folder."
+                "message": "Video must be inside downloads."
             }
 
         if not source.is_file():
@@ -379,7 +424,10 @@ def render_captioned_video(
             }
 
         job_id = uuid.uuid4().hex[:10]
-        output = OUTPUT_DIR / f"{job_id}_claude_captioned.mp4"
+
+        output = OUTPUT_DIR / (
+            f"{job_id}_claude_captioned.mp4"
+        )
 
         result = render_claude_captions(
             str(source),
@@ -399,23 +447,30 @@ def render_captioned_video(
             "message": str(error)[:1000]
         }
 
+
+# =====================================================
+# AUTOMATIC CAPTIONING
+# =====================================================
+
 @app.tool()
 def caption_uploaded_video(video_path: str) -> dict:
-    """Generate and burn captions into a video already uploaded to cloud."""
+    """Generate and burn captions into an uploaded video."""
 
     try:
         source = Path(video_path).resolve()
-        allowed_directory = DOWNLOAD_DIR.resolve()
 
-        if not source.is_relative_to(allowed_directory):
+        if not source.is_relative_to(DOWNLOAD_DIR.resolve()):
             return {
-                "error": "Video must be inside the server downloads folder."
+                "error": "Video must be inside downloads."
             }
 
         if not source.is_file():
-            return {"error": "Uploaded video not found."}
+            return {
+                "error": "Uploaded video not found."
+            }
 
         job_id = uuid.uuid4().hex[:10]
+
         output = OUTPUT_DIR / f"{job_id}_captioned.mp4"
 
         result = add_captions(
@@ -437,18 +492,26 @@ def caption_uploaded_video(video_path: str) -> dict:
         }
 
 
+# =====================================================
+# VIDEO METADATA
+# =====================================================
+
 @app.tool()
 def analyze_video_metadata(video_path: str) -> dict:
-    """
-    Get video duration, resolution, FPS and frame count.
-    """
+
     try:
         source = Path(video_path).resolve()
 
         if not source.is_relative_to(DOWNLOAD_DIR.resolve()):
             return {
                 "status": "error",
-                "message": "Video must be inside the uploads directory."
+                "message": "Video must be inside downloads."
+            }
+
+        if not source.is_file():
+            return {
+                "status": "error",
+                "message": "Video not found."
             }
 
         return video_intelligence.get_video_metadata(
@@ -462,22 +525,30 @@ def analyze_video_metadata(video_path: str) -> dict:
         }
 
 
+# =====================================================
+# SCENE DETECTION
+# =====================================================
+
 @app.tool()
 def detect_video_scenes(
     video_path: str,
     threshold: float = 30.0,
     minimum_gap_seconds: float = 1.0
 ) -> dict:
-    """
-    Detect scene changes and return their timestamps.
-    """
+
     try:
         source = Path(video_path).resolve()
 
         if not source.is_relative_to(DOWNLOAD_DIR.resolve()):
             return {
                 "status": "error",
-                "message": "Video must be inside the uploads directory."
+                "message": "Video must be inside downloads."
+            }
+
+        if not source.is_file():
+            return {
+                "status": "error",
+                "message": "Video not found."
             }
 
         return video_intelligence.detect_scenes(
@@ -492,21 +563,30 @@ def detect_video_scenes(
             "message": str(error)
         }
 
+
+# =====================================================
+# EXTRACT KEYFRAMES
+# =====================================================
+
 @app.tool()
 def extract_video_keyframes(
     video_path: str,
     interval_seconds: float = 10.0
 ) -> dict:
-    """
-    Extract representative frames from an uploaded video at regular intervals.
-    """
+
     try:
         source = Path(video_path).resolve()
 
         if not source.is_relative_to(DOWNLOAD_DIR.resolve()):
             return {
                 "status": "error",
-                "message": "Video must be inside the uploads directory."
+                "message": "Video must be inside downloads."
+            }
+
+        if not source.is_file():
+            return {
+                "status": "error",
+                "message": "Video not found."
             }
 
         return video_intelligence.extract_keyframes(
@@ -521,5 +601,11 @@ def extract_video_keyframes(
         }
 
 
+# =====================================================
+# START SERVER
+# =====================================================
+
 if __name__ == "__main__":
     app.run(transport="streamable-http")
+
+    
