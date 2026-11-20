@@ -58,9 +58,6 @@ app = FastMCP(
 caption_support.register(app)
 
 # Register direct upload, transcription and caption rendering.
-import clipmate_caption_support as caption_support
-
-caption_support.register(app)
 
 
 # ---------------------------------------------------------
